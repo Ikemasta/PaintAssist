@@ -4,78 +4,81 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Pixel Frame Mapper</title>
-
-<style>
-body{
-    font-family:Arial, sans-serif;
-    background:#222;
-    color:white;
-    padding:20px;
-}
-
-h2{
-    text-align:center;
-}
-
-.app{
-    display:flex;
-    gap:20px;
-    align-items:flex-start;
-    justify-content:center;
-    flex-wrap:wrap;
-}
-
-.controls{
-    margin-bottom:20px;
-}
-
-input,button{
-    padding:8px;
-    margin:5px;
-}
-
-canvas{
-    border:1px solid #555;
-    background:white;
-    display:block;
-}
-</style>
+<link rel="stylesheet" href="../assets/global.css">
 </head>
-<body>
+<body class="tool-colour">
+<div class="wrap">
 
-<h2>Pixel Frame Mapper</h2>
+  <nav class="tool-nav">
+    <span class="nav-label">Tools</span>
+    <a class="tool-btn tool-btn--value" href="../ValueFinder/Index.html">Value Finder</a>
+    <a class="tool-btn tool-btn--grey" href="../GreyScale/Index.html">Greyscale</a>
+    <a class="tool-btn tool-btn--edge" href="../EdgeDetect/Index.html">Edge Detection</a>
+    <a class="tool-btn tool-btn--colour" href="Index.html" aria-current="page">Colour Picker</a>
+  </nav>
 
-<div class="app">
+  <header>
+    <p class="eyebrow">Colour study tool</p>
+    <h1>Pixel Frame Mapper</h1>
+    <p>Click anywhere on the image to sample a colour and drop it into the nearest empty frame box. The magnifier helps you land on exactly the pixel you want.</p>
+  </header>
 
-<div>
-<div class="controls">
+  <section>
 
-<input type="file" id="imageInput">
+    <div class="controls">
 
-<label>
-Boxes Across Image:
-<input type="number" id="boxCount" value="10" min="5">
-</label>
+      <label>
+        Image
+        <input type="file" id="imageInput" accept="image/*">
+      </label>
 
-<label>
-Border Lines:
-<input type="number" id="borderLines" value="1" min="1">
-</label>
+      <label>
+        Boxes across
+        <input type="number" id="boxCount" value="10" min="5">
+      </label>
 
-<label>
-Sampling Radius (px):
-<input type="number" id="sampleRadius" value="3" min="0">
-</label>
+      <label>
+        Border lines
+        <input type="number" id="borderLines" value="1" min="1">
+      </label>
 
-<button id="applyBtn">Apply</button>
-<button id="resetBtn">Reset Drawing</button>
-<button id="saveBtn">Download PNG</button>
+      <label>
+        Sampling radius
+        <input type="number" id="sampleRadius" value="3" min="0">
+      </label>
 
+      <label>
+        <input type="checkbox" id="magToggle" checked>
+        Magnifier
+      </label>
+
+      <label>
+        Zoom
+        <input type="number" id="magZoom" value="5" min="2" max="40">
+      </label>
+
+      <button class="btn" id="applyBtn">Apply</button>
+      <button class="reset-btn" id="resetBtn">Reset drawing</button>
+      <button class="download-btn" id="saveBtn">Download PNG</button>
+
+    </div>
+
+    <div class="canvas-container hidden" id="canvasCard">
+      <div class="cap">Frame map</div>
+      <canvas id="canvas"></canvas>
+    </div>
+
+  </section>
+
+  <footer>Runs entirely in your browser. No image data leaves this page.</footer>
 </div>
 
-<canvas id="canvas"></canvas>
+<div id="magnifier">
+<canvas id="magCanvas" width="110" height="110"></canvas>
+<div id="magInfo">
+<span id="magSwatch"></span>
+<span id="magText">-</span>
 </div>
-
 </div>
 
 <script>
@@ -239,6 +242,10 @@ function buildProject(sourceImage){
         leaderLines:[]
     };
 
+    document
+    .getElementById("canvasCard")
+    .classList.remove("hidden");
+
     render();
 }
 
@@ -399,6 +406,182 @@ function(event){
 
     render();
 });
+
+const magnifier = document.getElementById("magnifier");
+const magCanvas = document.getElementById("magCanvas");
+const magCtx = magCanvas.getContext("2d");
+const magSwatch = document.getElementById("magSwatch");
+const magText = document.getElementById("magText");
+
+canvas.addEventListener("mousemove", updateMagnifier);
+canvas.addEventListener("mouseleave", hideMagnifier);
+
+let lastMagEvent = null;
+
+["sampleRadius","magZoom","magToggle"].forEach(id=>{
+
+    document
+    .getElementById(id)
+    .addEventListener("input",()=>{
+
+        if(lastMagEvent) updateMagnifier(lastMagEvent);
+
+    });
+
+});
+
+function canvasPos(event){
+
+    const rect =
+        canvas.getBoundingClientRect();
+
+    return {
+
+        x:(event.clientX - rect.left) *
+            (canvas.width/rect.width),
+
+        y:(event.clientY - rect.top) *
+            (canvas.height/rect.height)
+
+    };
+}
+
+function hideMagnifier(){
+
+    magnifier.style.display="none";
+}
+
+function updateMagnifier(event){
+
+    lastMagEvent = event;
+
+    if(!state ||
+       !document.getElementById("magToggle").checked){
+
+        hideMagnifier();
+        return;
+    }
+
+    const pos = canvasPos(event);
+
+    const insideImage =
+
+        pos.x >= state.imageX &&
+        pos.x <= state.imageX + state.imageWidth &&
+        pos.y >= state.imageY &&
+        pos.y <= state.imageY + state.imageHeight;
+
+    if(!insideImage){
+
+        hideMagnifier();
+        return;
+    }
+
+    const zoom =
+        Math.max(
+            2,
+            parseInt(
+                document.getElementById("magZoom").value,
+                10
+            ) || 5
+        );
+
+    const radius =
+        Math.max(
+            0,
+            parseInt(
+                document.getElementById("sampleRadius").value,
+                10
+            ) || 0
+        );
+
+    // Same pixel the click handler will sample.
+    const px =
+        Math.round(pos.x - state.imageX);
+
+    const py =
+        Math.round(pos.y - state.imageY);
+
+    const size = magCanvas.width;
+    const srcSize = size/zoom;
+
+    const sx = px + 0.5 - srcSize/2;
+    const sy = py + 0.5 - srcSize/2;
+
+    magCtx.fillStyle="#111";
+    magCtx.fillRect(0,0,size,size);
+
+    magCtx.imageSmoothingEnabled=false;
+
+    magCtx.drawImage(
+        state.imageCanvas,
+        sx,
+        sy,
+        srcSize,
+        srcSize,
+        0,
+        0,
+        size,
+        size
+    );
+
+    const centre = size/2;
+
+    if(radius>0){
+
+        magCtx.strokeStyle="rgba(255,255,255,0.9)";
+        magCtx.lineWidth=1;
+
+        magCtx.beginPath();
+        magCtx.arc(
+            centre,
+            centre,
+            radius*zoom,
+            0,
+            Math.PI*2
+        );
+        magCtx.stroke();
+    }
+
+    magCtx.strokeStyle="#ff0040";
+    magCtx.lineWidth=1;
+
+    magCtx.strokeRect(
+        centre - zoom/2,
+        centre - zoom/2,
+        zoom,
+        zoom
+    );
+
+    const colour =
+        sampleArea(
+            pos.x - state.imageX,
+            pos.y - state.imageY,
+            radius
+        );
+
+    magSwatch.style.background=colour;
+    magText.textContent=`${px},${py} ${colour}`;
+
+    magnifier.style.display="block";
+
+    const offset = 24;
+
+    const left =
+        Math.min(
+            event.clientX + offset,
+            window.innerWidth - magnifier.offsetWidth - 8
+        );
+
+    const top =
+        Math.min(
+            event.clientY + offset,
+            window.innerHeight - magnifier.offsetHeight - 8
+        );
+
+    magnifier.style.left = Math.max(8,left) + "px";
+    magnifier.style.top = Math.max(8,top) + "px";
+}
 
 function nearestUnfilledBox(x,y){
 
