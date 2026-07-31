@@ -72,6 +72,7 @@
 
 <canvas id="workCanvas" class="hidden"></canvas>
 
+<script src="../assets/shared-image.js"></script>
 <script>
 (function(){
   const dropzone = document.getElementById('dropzone');
@@ -126,10 +127,23 @@
     const url = URL.createObjectURL(file);
     img.onload = () => {
       URL.revokeObjectURL(url);
+      SharedImage.set(img, file.name);
       processImage(img);
     };
     img.src = url;
   }
+
+  SharedImage.attach({
+    onImage: (img, name) => {
+      originalFileName = (name || 'image').replace(/\.[^/.]+$/, '');
+      processImage(img);
+    },
+    onNewImage: () => {
+      workArea.classList.add('hidden');
+      dropzone.classList.remove('hidden');
+      fileInput.value = '';
+    }
+  });
 
   function processImage(img){
     let w = img.naturalWidth, h = img.naturalHeight;

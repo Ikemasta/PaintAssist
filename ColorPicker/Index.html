@@ -82,6 +82,7 @@
 </div>
 </div>
 
+<script src="../assets/shared-image.js"></script>
 <script>
 
 const TARGET_WIDTH = 1000;
@@ -115,10 +116,33 @@ function loadImage(e){
 
     const img = new Image();
 
-    img.onload = ()=>buildProject(img);
+    img.onload = ()=>{
+
+        SharedImage.set(img, file.name);
+        buildProject(img);
+
+    };
 
     img.src = URL.createObjectURL(file);
 }
+
+SharedImage.attach({
+
+    onImage: buildProject,
+
+    onNewImage: ()=>{
+
+        document.getElementById("imageInput").value = "";
+
+        document
+        .getElementById("canvasCard")
+        .classList.add("hidden");
+
+        state = null;
+
+    }
+
+});
 
 function buildProject(sourceImage){
 

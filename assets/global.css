@@ -183,6 +183,40 @@ body{
 .tool-card--edge  {--dot:var(--tool-edge-bright);}
 .tool-card--colour{--dot:var(--tool-colour-bright);}
 
+/* ---------- shared image bar ---------- */
+
+.shared-bar{
+  display:flex;
+  align-items:center;
+  gap:12px;
+  flex-wrap:wrap;
+  margin-bottom:28px;
+  padding:10px 12px;
+  background:var(--charcoal-2);
+  border:1px solid var(--line);
+  border-left:3px solid var(--accent-bright);
+  border-radius:4px;
+}
+
+.shared-bar[hidden]{display:none;}
+
+.shared-bar__thumb{
+  width:44px;
+  height:44px;
+  object-fit:cover;
+  border-radius:2px;
+  background:#000;
+}
+
+.shared-bar__text{
+  flex:1;
+  min-width:200px;
+  font-family:var(--mono);
+  font-size:11px;
+  letter-spacing:0.06em;
+  color:rgba(236,231,222,0.65);
+}
+
 /* ---------- header ---------- */
 
 header{margin-bottom:36px;}

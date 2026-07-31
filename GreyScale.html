@@ -4,18 +4,17 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Greyscale Converter</title>
-<link rel="stylesheet" href="../assets/global.css">
+<link rel="stylesheet" href="assets/global.css">
 </head>
 <body class="tool-grey">
 <div class="wrap">
 
   <nav class="tool-nav">
     <span class="nav-label">Tools</span>
-    <a class="tool-btn tool-btn--home" href="../Index.html">Home</a>
-    <a class="tool-btn tool-btn--value" href="../ValueFinder/Index.html">Value Finder</a>
-    <a class="tool-btn tool-btn--grey" href="Index.html" aria-current="page">Greyscale</a>
-    <a class="tool-btn tool-btn--edge" href="../EdgeDetect/Index.html">Edge Detection</a>
-    <a class="tool-btn tool-btn--colour" href="../ColorPicker/Index.html">Colour Picker</a>
+    <a class="tool-btn tool-btn--value" href="ValueFinder.html">Value Finder</a>
+    <a class="tool-btn tool-btn--grey" href="GreyScale.html" aria-current="page">Greyscale</a>
+    <a class="tool-btn tool-btn--edge" href="EdgeDetect/Index.html">Edge Detection</a>
+    <a class="tool-btn tool-btn--colour" href="ColorPicker/Index.html">Colour Picker</a>
   </nav>
 
   <header>
@@ -49,7 +48,6 @@
 
 <canvas id="workCanvas" class="hidden"></canvas>
 
-<script src="../assets/shared-image.js"></script>
 <script>
 (function(){
   const dropzone = document.getElementById('dropzone');
@@ -78,20 +76,10 @@
     const url = URL.createObjectURL(file);
     img.onload = () => {
       URL.revokeObjectURL(url);
-      SharedImage.set(img, file.name);
       processImage(img);
     };
     img.src = url;
   }
-
-  SharedImage.attach({
-    onImage: processImage,
-    onNewImage: () => {
-      workArea.classList.add('hidden');
-      dropzone.classList.remove('hidden');
-      fileInput.value = '';
-    }
-  });
 
   function processImage(img){
     const MAX_DIM = 1000;
