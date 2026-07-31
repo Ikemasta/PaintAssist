@@ -17,6 +17,8 @@
   /* one accent per tool */
   --tool-value:#8a3324;
   --tool-value-bright:#b34a34;
+  --tool-tone:#6b4f6b;
+  --tool-tone-bright:#96729a;
   --tool-grey:#5c6b73;
   --tool-grey-bright:#7d909a;
   --tool-edge:#4a6b3f;
@@ -39,6 +41,7 @@
 
 /* per-page accent, set with <body class="tool-edge"> etc. */
 body.tool-value  {--accent:var(--tool-value);  --accent-bright:var(--tool-value-bright);}
+body.tool-tone   {--accent:var(--tool-tone);   --accent-bright:var(--tool-tone-bright);}
 body.tool-grey   {--accent:var(--tool-grey);   --accent-bright:var(--tool-grey-bright);}
 body.tool-edge   {--accent:var(--tool-edge);   --accent-bright:var(--tool-edge-bright);}
 body.tool-quant  {--accent:var(--tool-quant);  --accent-bright:var(--tool-quant-bright);}
@@ -118,6 +121,7 @@ body{
 .tool-btn[aria-current="page"]::before{background:var(--paper);}
 
 .tool-btn--value {--dot:var(--tool-value-bright);}
+.tool-btn--tone  {--dot:var(--tool-tone-bright);}
 .tool-btn--grey  {--dot:var(--tool-grey-bright);}
 .tool-btn--edge  {--dot:var(--tool-edge-bright);}
 .tool-btn--quant {--dot:var(--tool-quant-bright);}
@@ -187,6 +191,7 @@ body{
 .tool-card:hover .tool-card__go{color:var(--paper);}
 
 .tool-card--value {--dot:var(--tool-value-bright);}
+.tool-card--tone  {--dot:var(--tool-tone-bright);}
 .tool-card--grey  {--dot:var(--tool-grey-bright);}
 .tool-card--edge  {--dot:var(--tool-edge-bright);}
 .tool-card--quant {--dot:var(--tool-quant-bright);}
@@ -540,6 +545,36 @@ canvas{display:block;}
 }
 
 .swatch:last-child{border-right:none;}
+
+.swatches--clickable .swatch{cursor:pointer;}
+
+.swatch.is-active{box-shadow:inset 0 0 0 3px var(--accent-bright);}
+
+/* value / colour readout line */
+.readout{
+  display:flex;
+  align-items:center;
+  gap:12px;
+  flex-wrap:wrap;
+  margin-top:12px;
+  padding:12px 14px;
+  background:var(--charcoal-2);
+  border:1px solid var(--line);
+  border-radius:4px;
+  font-family:var(--mono);
+  font-size:12px;
+  color:rgba(236,231,222,0.7);
+}
+
+.readout b{color:var(--paper);font-weight:600;}
+
+.chip{
+  width:24px;
+  height:24px;
+  border:1px solid var(--line);
+  border-radius:3px;
+  display:inline-block;
+}
 
 .swatch .pct{
   font-family:var(--mono);

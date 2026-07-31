@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tonal Values</title>
+<link rel="stylesheet" href="../assets/global.css">
+</head>
+<body class="tool-tone">
+<div class="wrap">
+
+  <nav class="tool-nav">
+    <span class="nav-label">Tools</span>
+    <a class="tool-btn tool-btn--home" href="../Index.html">Home</a>
+    <a class="tool-btn tool-btn--value" href="../ValueFinder/Index.html">Value Finder</a>
+    <a class="tool-btn tool-btn--tone" href="Index.html" aria-current="page">Tonal Values</a>
+    <a class="tool-btn tool-btn--grey" href="../GreyScale/Index.html">Greyscale</a>
+    <a class="tool-btn tool-btn--edge" href="../EdgeDetect/Index.html">Edge Detection</a>
+    <a class="tool-btn tool-btn--quant" href="../Quantize/Index.html">Quantize</a>
+    <a class="tool-btn tool-btn--grid" href="../GridOverlay/Index.html">Grid Overlay</a>
+    <a class="tool-btn tool-btn--colour" href="../ColorPicker/Index.html">Colour Picker</a>
+  </nav>
+
+  <header>
+    <p class="eyebrow">Value reading</p>
+    <h1>Tonal Values</h1>
+    <p>Read the tone anywhere in a reference. Move over the image to sample a patch, see where it sits on the value scale, and click a step in the scale to isolate every area of the picture that shares that value.</p>
+  </header>
+
+  <section>
+    <div class="dropzone" id="dropzone">
+      <p class="big">Drop a reference image, or click to browse</p>
+      <p class="small">JPG or PNG · processed locally, never uploaded anywhere</p>
+      <input type="file" id="fileInput" accept="image/*">
+    </div>
+  </section>
+
+  <section id="workArea" class="hidden">
+
+    <div class="controls">
+      <div class="control-group">
+        <label for="stepCount">Value steps</label>
+        <input type="range" id="stepCount" min="3" max="10" value="9" step="1">
+        <span class="value-display" id="stepCountValue">9</span>
+      </div>
+      <div class="control-group">
+        <label for="patchSize">Patch</label>
+        <input type="range" id="patchSize" min="0" max="24" value="4" step="1">
+        <span class="value-display" id="patchValue">9 px</span>
+      </div>
+      <div class="control-group">
+        <label for="greyToggle">View</label>
+        <input type="checkbox" id="greyToggle" checked>
+        <span class="value-display">Greyscale</span>
+      </div>
+      <button class="btn" id="clearBtn">Clear isolation</button>
+    </div>
+
+    <div class="readout" id="readout">
+      <span class="chip" id="readChip"></span>
+      <span id="readText">Move over the image to read a value</span>
+    </div>
+
+    <div class="canvas-container">
+      <div class="cap" id="imageCap">Reference</div>
+      <canvas id="viewCanvas"></canvas>
+    </div>
+
+    <div class="swatch-section" style="margin-top:36px;">
+      <div class="cap-row">
+        <h2>Value scale</h2>
+        <span id="scaleInfo"></span>
+      </div>
+      <div class="swatches swatches--clickable" id="scale"></div>
+    </div>
+
+    <div class="hist-wrap">
+      <div class="cap-row">
+        <h2 style="font-size:15px;">Luminance histogram</h2>
+        <span id="statsInfo"></span>
+      </div>
+      <canvas id="histCanvas"></canvas>
+    </div>
+  </section>
+
+  <footer>Runs entirely in your browser. No image data leaves this page.</footer>
+</div>
+
+<canvas id="workCanvas" class="hidden"></canvas>
+
+<script src="../assets/shared-image.js"></script>
+<script>
+(function(){
+  const dropzone = document.getElementById('dropzone');
+  const fileInput = document.getElementById('fileInput');
+  const workArea = document.getElementById('workArea');
+  const workCanvas = document.getElementById('workCanvas');
+  const viewCanvas = document.getElementById('viewCanvas');
+  const histCanvas = document.getElementById('histCanvas');
+  const stepCount = document.getElementById('stepCount');
+  const stepCountValue = document.getElementById('stepCountValue');
+  const patchSize = document.getElementById('patchSize');
+  const patchValue = document.getElementById('patchValue');
+  const greyToggle = document.getElementById('greyToggle');
+  const clearBtn = document.getElementById('clearBtn');
+  const scaleEl = document.getElementById('scale');
+  const scaleInfo = document.getElementById('scaleInfo');
+  const statsInfo = document.getElementById('statsInfo');
+  const readChip = document.getElementById('readChip');
+  const readText = document.getElementById('readText');
+  const imageCap = document.getElementById('imageCap');
+
+  const MAX_DIM = 1000;
+
+  let rgba = null;          // source pixels
+  let lum = null;           // luminance per pixel, 0-255
+  let W = 0, H = 0;
+  let isolated = -1;        // value step being isolated, -1 for none
+
+  dropzone.addEventListener('click', () => fileInput.click());
+  dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('drag'); });
+  dropzone.addEventListener('dragleave', () => dropzone.classList.remove('drag'));
+  dropzone.addEventListener('drop', e => {
+    e.preventDefault();
+    dropzone.classList.remove('drag');
+    if(e.dataTransfer.files && e.dataTransfer.files[0]) loadFile(e.dataTransfer.files[0]);
+  });
+  fileInput.addEventListener('change', e => {
+    if(e.target.files && e.target.files[0]) loadFile(e.target.files[0]);
+  });
+
+  stepCount.addEventListener('input', () => {
+    stepCountValue.textContent = stepCount.value;
+    isolated = -1;
+    analyse();
+  });
+  patchSize.addEventListener('input', () => {
+    patchValue.textContent = (parseInt(patchSize.value, 10) * 2 + 1) + ' px';
+  });
+  greyToggle.addEventListener('change', drawView);
+  clearBtn.addEventListener('click', () => {
+    isolated = -1;
+    analyse();
+  });
+
+  function loadFile(file){
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      SharedImage.set(img, file.name);
+      processImage(img);
+    };
+    img.src = url;
+  }
+
+  SharedImage.attach({
+    onImage: processImage,
+    onNewImage: () => {
+      workArea.classList.add('hidden');
+      dropzone.classList.remove('hidden');
+      fileInput.value = '';
+    }
+  });
+
+  function processImage(img){
+    let w = img.naturalWidth, h = img.naturalHeight;
+    const scale = Math.min(1, MAX_DIM / Math.max(w, h));
+    W = w = Math.round(w * scale);
+    H = h = Math.round(h * scale);
+
+    workCanvas.width = w; workCanvas.height = h;
+    const wctx = workCanvas.getContext('2d');
+    wctx.drawImage(img, 0, 0, w, h);
+    rgba = wctx.getImageData(0, 0, w, h).data;
+
+    lum = new Uint8ClampedArray(w * h);
+    for(let p = 0, i = 0; p < lum.length; p++, i += 4){
+      lum[p] = 0.2126*rgba[i] + 0.7152*rgba[i+1] + 0.0722*rgba[i+2];
+    }
+
+    isolated = -1;
+    dropzone.classList.add('hidden');
+    workArea.classList.remove('hidden');
+    analyse();
+  }
+
+  function steps(){ return parseInt(stepCount.value, 10); }
+
+  // step 0 is the lightest, matching how painters number a value scale
+  function stepOf(l, n){
+    const s = n - 1 - Math.floor(l / 256 * n);
+    return s < 0 ? 0 : s > n - 1 ? n - 1 : s;
+  }
+
+  function stepTone(s, n){
+    return Math.round(255 * (n - 1 - s) / (n - 1));
+  }
+
+  function analyse(){
+    if(!lum) return;
+
+    const n = steps();
+    const counts = new Uint32Array(n);
+    let sum = 0, min = 255, max = 0;
+
+    for(let p = 0; p < lum.length; p++){
+      const l = lum[p];
+      counts[stepOf(l, n)]++;
+      sum += l;
+      if(l < min) min = l;
+      if(l > max) max = l;
+    }
+
+    drawScale(counts, n);
+    drawHistogram();
+    drawView();
+
+    const mean = sum / lum.length;
+    const meanStep = stepOf(mean, n) + 1;
+    const key = mean > 170 ? 'high key' : mean < 85 ? 'low key' : 'mid key';
+
+    statsInfo.textContent =
+      `mean ${(mean/255*100).toFixed(0)}% · range ${(min/255*100).toFixed(0)}–${(max/255*100).toFixed(0)}% · ${key}`;
+    scaleInfo.textContent =
+      `${n} steps · average value ${meanStep} · 1 = white`;
+  }
+
+  function drawScale(counts, n){
+    const total = lum.length;
+    scaleEl.innerHTML = '';
+
+    for(let s = 0; s < n; s++){
+      const tone = stepTone(s, n);
+      const div = document.createElement('div');
+      div.className = 'swatch' + (isolated === s ? ' is-active' : '');
+      div.style.background = `rgb(${tone},${tone},${tone})`;
+      div.style.color = tone > 130 ? '#201f1c' : '#ece7de';
+      div.innerHTML =
+        `<span class="pct">${s + 1}</span>` +
+        `<span class="hex">${(counts[s] / total * 100).toFixed(1)}%</span>`;
+      div.addEventListener('click', () => {
+        isolated = isolated === s ? -1 : s;
+        drawScale(counts, n);
+        drawView();
+      });
+      scaleEl.appendChild(div);
+    }
+  }
+
+  function drawView(){
+    if(!lum) return;
+
+    const n = steps();
+    const out = new ImageData(W, H);
+    const d = out.data;
+    const grey = greyToggle.checked;
+
+    for(let p = 0, i = 0; p < lum.length; p++, i += 4){
+      let r, g, b;
+      if(grey){ r = g = b = lum[p]; }
+      else { r = rgba[i]; g = rgba[i+1]; b = rgba[i+2]; }
+
+      if(isolated >= 0 && stepOf(lum[p], n) !== isolated){
+        r = r * 0.25 + 20; g = g * 0.25 + 20; b = b * 0.25 + 20;
+      }
+
+      d[i] = r; d[i+1] = g; d[i+2] = b; d[i+3] = 255;
+    }
+
+    viewCanvas.width = W; viewCanvas.height = H;
+    viewCanvas.getContext('2d').putImageData(out, 0, 0);
+
+    imageCap.textContent = isolated >= 0
+      ? `Isolating value ${isolated + 1} of ${n}`
+      : (grey ? 'Reference, greyscale' : 'Reference');
+  }
+
+  function drawHistogram(){
+    const hist = new Uint32Array(256);
+    for(let p = 0; p < lum.length; p++) hist[lum[p]]++;
+
+    const w = histCanvas.clientWidth || 900;
+    const h = 120;
+    histCanvas.width = w;
+    histCanvas.height = h;
+
+    const ctx = histCanvas.getContext('2d');
+    ctx.clearRect(0, 0, w, h);
+
+    let peak = 0;
+    for(let i = 0; i < 256; i++) if(hist[i] > peak) peak = hist[i];
+    if(!peak) return;
+
+    for(let i = 0; i < 256; i++){
+      const x = i / 256 * w;
+      const bh = hist[i] / peak * (h - 8);
+      ctx.fillStyle = `rgb(${i},${i},${i})`;
+      ctx.fillRect(x, h - bh, w / 256 + 1, bh);
+    }
+
+    const n = steps();
+    ctx.strokeStyle = 'rgba(236,231,222,0.35)';
+    ctx.lineWidth = 1;
+    for(let s = 1; s < n; s++){
+      const x = Math.round(s / n * w) + 0.5;
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, h);
+      ctx.stroke();
+    }
+  }
+
+  /* ---- reading a patch ---- */
+
+  viewCanvas.addEventListener('mousemove', readAt);
+  viewCanvas.addEventListener('mouseleave', () => {
+    readChip.style.background = 'transparent';
+    readText.textContent = 'Move over the image to read a value';
+  });
+
+  function readAt(event){
+    if(!lum) return;
+
+    const rect = viewCanvas.getBoundingClientRect();
+    const x = Math.round((event.clientX - rect.left) * (W / rect.width));
+    const y = Math.round((event.clientY - rect.top) * (H / rect.height));
+    const rad = parseInt(patchSize.value, 10);
+
+    let r = 0, g = 0, b = 0, l = 0, count = 0;
+
+    for(let dy = -rad; dy <= rad; dy++){
+      for(let dx = -rad; dx <= rad; dx++){
+        const px = Math.min(Math.max(x + dx, 0), W - 1);
+        const py = Math.min(Math.max(y + dy, 0), H - 1);
+        const p = py * W + px;
+        const i = p * 4;
+        r += rgba[i]; g += rgba[i+1]; b += rgba[i+2];
+        l += lum[p];
+        count++;
+      }
+    }
+
+    r = Math.round(r/count); g = Math.round(g/count); b = Math.round(b/count);
+    l = l / count;
+
+    const n = steps();
+    const s = stepOf(l, n) + 1;
+    const hex = '#' + [r,g,b].map(v => v.toString(16).padStart(2,'0')).join('').toUpperCase();
+
+    readChip.style.background = `rgb(${r},${g},${b})`;
+    readText.innerHTML =
+      `value <b>${s} of ${n}</b> · luminance <b>${(l/255*100).toFixed(0)}%</b> ` +
+      `(${Math.round(l)}/255) · <b>${hex}</b> · x ${x}, y ${y}`;
+  }
+})();
+</script>
+</body>
+</html>
