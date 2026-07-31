@@ -108,7 +108,7 @@ Magnifier
 
 <label>
 Zoom:
-<input type="number" id="magZoom" value="8" min="2" max="40">
+<input type="number" id="magZoom" value="5" min="2" max="40">
 </label>
 
 <button id="applyBtn">Apply</button>
@@ -123,7 +123,7 @@ Zoom:
 </div>
 
 <div id="magnifier">
-<canvas id="magCanvas" width="180" height="180"></canvas>
+<canvas id="magCanvas" width="110" height="110"></canvas>
 <div id="magInfo">
 <span id="magSwatch"></span>
 <span id="magText">-</span>
@@ -461,6 +461,20 @@ const magText = document.getElementById("magText");
 canvas.addEventListener("mousemove", updateMagnifier);
 canvas.addEventListener("mouseleave", hideMagnifier);
 
+let lastMagEvent = null;
+
+["sampleRadius","magZoom","magToggle"].forEach(id=>{
+
+    document
+    .getElementById(id)
+    .addEventListener("input",()=>{
+
+        if(lastMagEvent) updateMagnifier(lastMagEvent);
+
+    });
+
+});
+
 function canvasPos(event){
 
     const rect =
@@ -483,6 +497,8 @@ function hideMagnifier(){
 }
 
 function updateMagnifier(event){
+
+    lastMagEvent = event;
 
     if(!state ||
        !document.getElementById("magToggle").checked){
@@ -512,7 +528,7 @@ function updateMagnifier(event){
             parseInt(
                 document.getElementById("magZoom").value,
                 10
-            ) || 8
+            ) || 5
         );
 
     const radius =
