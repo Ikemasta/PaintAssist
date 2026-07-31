@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Greyscale Converter</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Work+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#201f1c;
+    --paper:#ece7de;
+    --paper-dim:#ddd6c8;
+    --charcoal:#1b1b1a;
+    --charcoal-2:#262623;
+    --sienna:#8a3324;
+    --sienna-bright:#b34a34;
+    --slate:#5c6b73;
+    --line: rgba(236,231,222,0.14);
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--charcoal);
+    color:var(--paper);
+    font-family:'Work Sans', sans-serif;
+    min-height:100vh;
+    padding:48px 24px 80px;
+  }
+  .wrap{max-width:960px;margin:0 auto;}
+
+  header{margin-bottom:36px;}
+  .eyebrow{
+    font-family:'IBM Plex Mono', monospace;
+    font-size:12px;
+    letter-spacing:0.14em;
+    text-transform:uppercase;
+    color:var(--sienna-bright);
+    margin:0 0 10px;
+  }
+  h1{
+    font-family:'Fraunces', serif;
+    font-optical-sizing:auto;
+    font-weight:600;
+    font-size:clamp(32px,5vw,48px);
+    line-height:1.05;
+    margin:0 0 14px;
+    letter-spacing:-0.01em;
+  }
+  header p{
+    max-width:56ch;
+    color:rgba(236,231,222,0.72);
+    line-height:1.55;
+    font-size:15px;
+    margin:0;
+  }
+
+  section{margin-top:44px;}
+
+  .dropzone{
+    border:1.5px dashed rgba(236,231,222,0.35);
+    border-radius:4px;
+    padding:56px 24px;
+    text-align:center;
+    cursor:pointer;
+    transition:border-color .15s ease, background .15s ease;
+    background:rgba(236,231,222,0.02);
+  }
+  .dropzone:hover, .dropzone.drag{
+    border-color:var(--sienna-bright);
+    background:rgba(138,51,36,0.08);
+  }
+  .dropzone p.big{
+    font-family:'Fraunces', serif;
+    font-size:20px;
+    margin:0 0 6px;
+  }
+  .dropzone p.small{
+    font-size:13px;
+    color:rgba(236,231,222,0.5);
+    margin:0;
+  }
+  input[type=file]{display:none;}
+
+  .controls{
+    display:flex;
+    align-items:center;
+    gap:20px;
+    flex-wrap:wrap;
+    margin-top:8px;
+    padding:16px 18px;
+    background:var(--charcoal-2);
+    border:1px solid var(--line);
+    border-radius:4px;
+  }
+  .download-btn{
+    font-family:'Work Sans', sans-serif;
+    font-size:13px;
+    font-weight:500;
+    padding:9px 16px;
+    border-radius:3px;
+    border:1px solid var(--line);
+    background:var(--sienna);
+    border-color:var(--sienna);
+    color:var(--paper);
+    cursor:pointer;
+    transition:all .15s ease;
+    margin-left:auto;
+  }
+  .download-btn:hover{background:var(--sienna-bright);}
+
+  .canvas-container{
+    margin-top:20px;
+    background:var(--paper);
+    border-radius:4px;
+    padding:10px;
+  }
+  .canvas-container .cap{
+    font-family:'IBM Plex Mono', monospace;
+    font-size:10px;
+    letter-spacing:0.1em;
+    text-transform:uppercase;
+    color:var(--ink);
+    opacity:0.55;
+    padding:4px 4px 8px;
+  }
+  canvas{
+    display:block;
+    width:100%;
+    height:auto;
+    border-radius:2px;
+    background:#000;
+  }
+
+  footer{
+    margin-top:56px;
+    padding-top:20px;
+    border-top:1px solid var(--line);
+    font-family:'IBM Plex Mono', monospace;
+    font-size:11px;
+    color:rgba(236,231,222,0.35);
+  }
+
+  .hidden{display:none !important;}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <p class="eyebrow">Image Processing</p>
+    <h1>Greyscale Converter</h1>
+    <p>Convert your image to greyscale and download the result. Simply drop an image or click to browse.</p>
+  </header>
+
+  <section>
+    <div class="dropzone" id="dropzone">
+      <p class="big">Drop a reference image, or click to browse</p>
+      <p class="small">JPG or PNG · processed locally, never uploaded anywhere</p>
+      <input type="file" id="fileInput" accept="image/*">
+    </div>
+  </section>
+
+  <section id="workArea" class="hidden">
+
+    <div class="controls">
+      <button class="download-btn" id="downloadBtn">Download greyscale</button>
+    </div>
+
+    <div class="canvas-container">
+      <div class="cap">Greyscale image</div>
+      <canvas id="grayCanvas"></canvas>
+    </div>
+  </section>
+
+  <footer>Runs entirely in your browser. No image data leaves this page.</footer>
+</div>
+
+<canvas id="workCanvas" class="hidden"></canvas>
+
+<script>
+(function(){
+  const dropzone = document.getElementById('dropzone');
+  const fileInput = document.getElementById('fileInput');
+  const workArea = document.getElementById('workArea');
+  const grayCanvas = document.getElementById('grayCanvas');
+  const workCanvas = document.getElementById('workCanvas');
+  const downloadBtn = document.getElementById('downloadBtn');
+
+  let W = 0, H = 0;
+
+  dropzone.addEventListener('click', () => fileInput.click());
+  dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('drag'); });
+  dropzone.addEventListener('dragleave', () => dropzone.classList.remove('drag'));
+  dropzone.addEventListener('drop', e => {
+    e.preventDefault();
+    dropzone.classList.remove('drag');
+    if(e.dataTransfer.files && e.dataTransfer.files[0]) loadFile(e.dataTransfer.files[0]);
+  });
+  fileInput.addEventListener('change', e => {
+    if(e.target.files && e.target.files[0]) loadFile(e.target.files[0]);
+  });
+
+  function loadFile(file){
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      processImage(img);
+    };
+    img.src = url;
+  }
+
+  function processImage(img){
+    const MAX_DIM = 1000;
+    let w = img.naturalWidth, h = img.naturalHeight;
+    const scale = Math.min(1, MAX_DIM / Math.max(w,h));
+    w = Math.round(w*scale); h = Math.round(h*scale);
+    W = w; H = h;
+
+    workCanvas.width = w; workCanvas.height = h;
+    const wctx = workCanvas.getContext('2d');
+    wctx.drawImage(img, 0, 0, w, h);
+    const imgData = wctx.getImageData(0,0,w,h);
+    const data = imgData.data;
+
+    const grayData = wctx.createImageData(w,h);
+    for(let i=0, p=0; i<data.length; i+=4, p++){
+      const l = 0.2126*data[i] + 0.7152*data[i+1] + 0.0722*data[i+2];
+      grayData.data[i] = l; grayData.data[i+1] = l; grayData.data[i+2] = l; grayData.data[i+3] = 255;
+    }
+
+    grayCanvas.width = w; grayCanvas.height = h;
+    grayCanvas.getContext('2d').putImageData(grayData, 0, 0);
+
+    dropzone.classList.add('hidden');
+    workArea.classList.remove('hidden');
+  }
+
+  downloadBtn.addEventListener('click', () => {
+    const link = document.createElement('a');
+    link.download = 'greyscale.png';
+    link.href = grayCanvas.toDataURL('image/png');
+    link.click();
+  });
+})();
+</script>
+</body>
+</html>

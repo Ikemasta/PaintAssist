@@ -1,0 +1,558 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pixel Frame Mapper</title>
+
+<style>
+body{
+    font-family:Arial, sans-serif;
+    background:#222;
+    color:white;
+    padding:20px;
+    text-align:center;
+}
+
+.controls{
+    margin-bottom:20px;
+}
+
+input,button{
+    padding:8px;
+    margin:5px;
+}
+
+canvas{
+    border:1px solid #555;
+    background:white;
+}
+
+
+
+</style>
+</head>
+<body>
+
+<h2>Pixel Frame Mapper</h2>
+
+<div class="controls">
+
+<input type="file" id="imageInput">
+
+<label>
+Boxes Across Image:
+<input type="number" id="boxCount" value="15" min="5">
+</label>
+
+<label>
+Border Lines:
+<input type="number" id="borderLines" value="1" min="1">
+</label>
+
+<label>
+Sampling Radius (px):
+<input type="number" id="sampleRadius" value="3" min="0">
+</label>
+
+<button id="applyBtn">Apply</button>
+<button id="resetBtn">Reset</button>
+<button id="saveBtn">Download PNG</button>
+
+</div>
+
+<canvas id="canvas"></canvas>
+<canvas id="workCanvas" style="display:none"></canvas>
+<canvas id="grayCanvas" style="display:none"></canvas>
+
+<script>
+
+const TARGET_WIDTH = 1000;
+const BOX_FILL_RATIO = 0.85;
+
+const canvas = document.getElementById("canvas");
+const ctx = canvas.getContext("2d");
+const workCanvas = document.getElementById("workCanvas");
+const grayCanvas = document.getElementById("grayCanvas");
+
+let state = null;
+
+document
+.getElementById("imageInput")
+.addEventListener("change", loadImage);
+
+document
+.getElementById("applyBtn")
+.addEventListener("click", applySettings);
+
+document
+.getElementById("resetBtn")
+.addEventListener("click", resetProject);
+
+document
+    .getElementById("saveBtn")
+    .addEventListener("click", () => {
+        saveCanvas();
+        saveGrayCanvas();
+    });
+
+function loadImage(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const img = new Image();
+
+    img.onload = () => {
+        processImage(img);
+        saveGrayCanvas();
+    };
+
+    img.src = URL.createObjectURL(file);
+}
+
+
+function buildProject(sourceImage){
+
+    const boxesAcross =
+        parseInt(document.getElementById("boxCount").value, 10) || 40;
+
+    const borderLines =
+        parseInt(document.getElementById("borderLines").value, 10) || 2;
+
+    const sampleRadius =
+        parseInt(document.getElementById("sampleRadius").value, 10) || 0;
+
+    const scale =
+        TARGET_WIDTH / sourceImage.width;
+
+    const imageWidth = TARGET_WIDTH;
+
+    const imageHeight =
+        Math.round(sourceImage.height * scale);
+
+    const boxWidth =
+        imageWidth / boxesAcross;
+
+    const imageRows =
+        Math.max(1, Math.round(imageHeight / boxWidth));
+
+    const boxHeight =
+        imageHeight / imageRows;
+
+    const totalCols =
+        boxesAcross + borderLines * 2;
+
+    const totalRows =
+        imageRows + borderLines * 2;
+
+    const canvasWidth =
+        Math.round(totalCols * boxWidth);
+
+    const canvasHeight =
+        Math.round(totalRows * boxHeight);
+
+    canvas.width = canvasWidth;
+    canvas.height = canvasHeight;
+
+    const imageCanvas =
+        document.createElement("canvas");
+
+    imageCanvas.width = imageWidth;
+    imageCanvas.height = imageHeight;
+
+    const imageCtx =
+        imageCanvas.getContext("2d");
+
+    imageCtx.drawImage(
+        sourceImage,
+        0,
+        0,
+        imageWidth,
+        imageHeight
+    );
+
+    const imageData =
+        imageCtx.getImageData(
+            0,
+            0,
+            imageWidth,
+            imageHeight
+        );
+
+    const imageX =
+        borderLines * boxWidth;
+
+    const imageY =
+        borderLines * boxHeight;
+
+    const boxes = [];
+
+    for(let row=0; row<totalRows; row++){
+
+        for(let col=0; col<totalCols; col++){
+
+            const borderBox =
+                row < borderLines ||
+                row >= totalRows-borderLines ||
+                col < borderLines ||
+                col >= totalCols-borderLines;
+
+            if(!borderBox) continue;
+
+            boxes.push({
+
+                row,
+                col,
+
+                cx:(col+0.5)*boxWidth,
+                cy:(row+0.5)*boxHeight,
+
+                filled:false,
+                colour:"#FFFFFF"
+
+            });
+        }
+    }
+
+    state = {
+
+        sourceImage,
+        boxWidth,
+        boxHeight,
+        borderLines,
+        sampleRadius,
+
+        imageWidth,
+        imageHeight,
+
+        imageX,
+        imageY,
+
+        imageCanvas,
+        imageData,
+
+        boxes,
+
+        leaderLines:[]
+    };
+
+    render();
+}
+
+function render(){
+
+    if(!state) return;
+
+    ctx.clearRect(
+        0,
+        0,
+        canvas.width,
+        canvas.height
+    );
+
+    ctx.fillStyle="#ece8df";
+    ctx.fillRect(
+        0,
+        0,
+        canvas.width,
+        canvas.height
+    );
+
+    state.boxes.forEach(box=>{
+
+        const sizeW =
+            state.boxWidth * BOX_FILL_RATIO;
+
+        const sizeH =
+            state.boxHeight * BOX_FILL_RATIO;
+
+        const x =
+            box.cx - sizeW/2;
+
+        const y =
+            box.cy - sizeH/2;
+
+        ctx.fillStyle = box.colour;
+
+        ctx.fillRect(
+            x,
+            y,
+            sizeW,
+            sizeH
+        );
+
+        ctx.strokeStyle="#999";
+
+        ctx.strokeRect(
+            x,
+            y,
+            sizeW,
+            sizeH
+        );
+    });
+
+    ctx.drawImage(
+        state.imageCanvas,
+        state.imageX,
+        state.imageY
+    );
+
+    ctx.strokeStyle="rgba(255,255,255,0.85)";
+    ctx.lineWidth=1;
+
+    state.leaderLines.forEach(line=>{
+
+        if(line.radius>0){
+
+            ctx.beginPath();
+            ctx.arc(
+                line.x1,
+                line.y1,
+                line.radius,
+                0,
+                Math.PI*2
+            );
+            ctx.stroke();
+        }
+    });
+
+    ctx.strokeStyle="white";
+    ctx.lineWidth=2;
+
+    state.leaderLines.forEach(line=>{
+
+        ctx.beginPath();
+
+        ctx.moveTo(
+            line.x1,
+            line.y1
+        );
+
+        ctx.lineTo(
+            line.x2,
+            line.y2
+        );
+
+        ctx.stroke();
+    });
+}
+
+canvas.addEventListener(
+"click",
+function(event){
+
+    if(!state) return;
+
+    const rect =
+        canvas.getBoundingClientRect();
+
+    const x =
+        (event.clientX - rect.left) *
+        (canvas.width/rect.width);
+
+    const y =
+        (event.clientY - rect.top) *
+        (canvas.height/rect.height);
+
+    const insideImage =
+
+        x >= state.imageX &&
+        x <= state.imageX + state.imageWidth &&
+        y >= state.imageY &&
+        y <= state.imageY + state.imageHeight;
+
+    if(!insideImage) return;
+
+    state.sampleRadius =
+        Math.max(
+            0,
+            parseInt(
+                document.getElementById("sampleRadius").value,
+                10
+            ) || 0
+        );
+
+    const colour =
+        sampleArea(
+            x-state.imageX,
+            y-state.imageY,
+            state.sampleRadius
+        );
+
+    const box =
+        nearestUnfilledBox(x,y);
+
+    if(!box) return;
+
+    box.filled=true;
+    box.colour=colour;
+
+    state.leaderLines.push({
+
+        x1:x,
+        y1:y,
+        x2:box.cx,
+        y2:box.cy,
+        radius:state.sampleRadius
+
+    });
+
+    render();
+});
+
+function nearestUnfilledBox(x,y){
+
+    let best=null;
+    let bestDist=Infinity;
+
+    state.boxes.forEach(box=>{
+
+        if(box.filled) return;
+
+        const dx=box.cx-x;
+        const dy=box.cy-y;
+
+        const d=dx*dx+dy*dy;
+
+        if(d<bestDist){
+
+            bestDist=d;
+            best=box;
+        }
+
+    });
+
+    return best;
+}
+
+function sampleArea(ix,iy,radius){
+
+    const x=Math.round(ix);
+    const y=Math.round(iy);
+
+    let r=0;
+    let g=0;
+    let b=0;
+    let count=0;
+
+    for(let dy=-radius; dy<=radius; dy++){
+
+        for(let dx=-radius; dx<=radius; dx++){
+
+            const px =
+                Math.max(
+                    0,
+                    Math.min(
+                        state.imageWidth-1,
+                        x+dx
+                    )
+                );
+
+            const py =
+                Math.max(
+                    0,
+                    Math.min(
+                        state.imageHeight-1,
+                        y+dy
+                    )
+                );
+
+            const index =
+                (py*state.imageWidth+px)*4;
+
+            r += state.imageData.data[index];
+            g += state.imageData.data[index+1];
+            b += state.imageData.data[index+2];
+
+            count++;
+        }
+    }
+
+    if(count===0) return "rgb(255,255,255)";
+
+    r=Math.round(r/count);
+    g=Math.round(g/count);
+    b=Math.round(b/count);
+
+    return `rgb(${r},${g},${b})`;
+}
+
+function applySettings(){
+
+    if(!state || !state.sourceImage) return;
+
+    buildProject(state.sourceImage);
+}
+
+function resetProject(){
+
+    if(!state) return;
+
+    state.boxes.forEach(box=>{
+
+        box.filled=false;
+        box.colour="#FFFFFF";
+
+    });
+
+    state.leaderLines=[];
+
+    render();
+}
+
+function saveCanvas(){
+
+    if(!state) return;
+
+    const a=document.createElement("a");
+
+    a.download="pixel-frame.png";
+    a.href=canvas.toDataURL("image/png");
+
+    a.click();
+}
+
+function processImage(img) {
+    const w = img.naturalWidth;
+    const h = img.naturalHeight;
+
+    workCanvas.width = w;
+    workCanvas.height = h;
+
+    const wctx = workCanvas.getContext("2d");
+    wctx.drawImage(img, 0, 0);
+
+    const imgData = wctx.getImageData(0, 0, w, h);
+    const data = imgData.data;
+
+    for (let i = 0; i < data.length; i += 4) {
+        const gray =
+            0.2126 * data[i] +
+            0.7152 * data[i + 1] +
+            0.0722 * data[i + 2];
+
+        data[i] = gray;
+        data[i + 1] = gray;
+        data[i + 2] = gray;
+    }
+
+    grayCanvas.width = w;
+    grayCanvas.height = h;
+
+    grayCanvas
+        .getContext("2d")
+        .putImageData(imgData, 0, 0);
+}
+
+function saveGrayCanvas() {
+    const a = document.createElement("a");
+
+    a.download = "gray-frame.png";
+    a.href = grayCanvas.toDataURL("image/png");
+
+    a.click();
+}
+</script>
+
+</body>
+</html>
