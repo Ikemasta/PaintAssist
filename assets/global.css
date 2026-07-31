@@ -115,6 +115,73 @@ body{
 .tool-btn--grey  {--dot:var(--tool-grey-bright);}
 .tool-btn--edge  {--dot:var(--tool-edge-bright);}
 .tool-btn--colour{--dot:var(--tool-colour-bright);}
+.tool-btn--home  {--dot:var(--paper-dim);}
+
+/* ---------- landing page cards ---------- */
+
+.tool-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(280px,1fr));
+  gap:16px;
+}
+
+.tool-card{
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+  padding:22px 22px 20px;
+  text-decoration:none;
+  color:var(--paper);
+  background:var(--charcoal-2);
+  border:1px solid var(--line);
+  border-left:3px solid var(--dot,var(--accent-bright));
+  border-radius:4px;
+  transition:transform .15s ease, border-color .15s ease, background .15s ease;
+}
+
+.tool-card:hover{
+  transform:translateY(-2px);
+  background:#2c2c28;
+  border-color:var(--dot,var(--accent-bright));
+}
+
+.tool-card__tag{
+  font-family:var(--mono);
+  font-size:10px;
+  letter-spacing:0.14em;
+  text-transform:uppercase;
+  color:var(--dot,var(--accent-bright));
+}
+
+.tool-card h2{
+  font-family:var(--serif);
+  font-size:22px;
+  font-weight:600;
+  margin:0;
+}
+
+.tool-card p{
+  margin:0;
+  font-size:14px;
+  line-height:1.5;
+  color:rgba(236,231,222,0.68);
+}
+
+.tool-card__go{
+  margin-top:8px;
+  font-family:var(--mono);
+  font-size:11px;
+  letter-spacing:0.1em;
+  text-transform:uppercase;
+  color:rgba(236,231,222,0.45);
+}
+
+.tool-card:hover .tool-card__go{color:var(--paper);}
+
+.tool-card--value {--dot:var(--tool-value-bright);}
+.tool-card--grey  {--dot:var(--tool-grey-bright);}
+.tool-card--edge  {--dot:var(--tool-edge-bright);}
+.tool-card--colour{--dot:var(--tool-colour-bright);}
 
 /* ---------- header ---------- */
 
