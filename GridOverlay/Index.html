@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Grid Overlay</title>
+<link rel="stylesheet" href="../assets/global.css">
+</head>
+<body class="tool-grid">
+<div class="wrap">
+
+  <nav class="tool-nav">
+    <span class="nav-label">Tools</span>
+    <a class="tool-btn tool-btn--home" href="../Index.html">Home</a>
+    <a class="tool-btn tool-btn--value" href="../ValueFinder/Index.html">Value Finder</a>
+    <a class="tool-btn tool-btn--grey" href="../GreyScale/Index.html">Greyscale</a>
+    <a class="tool-btn tool-btn--edge" href="../EdgeDetect/Index.html">Edge Detection</a>
+    <a class="tool-btn tool-btn--quant" href="../Quantize/Index.html">Quantize</a>
+    <a class="tool-btn tool-btn--grid" href="Index.html" aria-current="page">Grid Overlay</a>
+    <a class="tool-btn tool-btn--colour" href="../ColorPicker/Index.html">Colour Picker</a>
+  </nav>
+
+  <header>
+    <p class="eyebrow">Drawing aid</p>
+    <h1>Grid Overlay</h1>
+    <p>Lay a grid over a reference so you can copy it square by square. Pick how many divisions across; the cells stay square, so the number of rows follows from the image proportions.</p>
+  </header>
+
+  <section>
+    <div class="dropzone" id="dropzone">
+      <p class="big">Drop a reference image, or click to browse</p>
+      <p class="small">JPG or PNG · processed locally, never uploaded anywhere</p>
+      <input type="file" id="fileInput" accept="image/*">
+    </div>
+  </section>
+
+  <section id="workArea" class="hidden">
+
+    <div class="controls">
+      <div class="control-group">
+        <label for="divisions">Divisions X</label>
+        <input type="range" id="divisions" min="2" max="40" value="8" step="1">
+        <span class="value-display" id="divisionsValue">8</span>
+      </div>
+      <div class="control-group">
+        <label for="lineWidth">Line width</label>
+        <input type="range" id="lineWidth" min="1" max="12" value="2" step="1">
+        <span class="value-display" id="lineWidthValue">2 px</span>
+      </div>
+      <div class="control-group">
+        <label for="lineColour">Colour</label>
+        <input type="color" id="lineColour" value="#FF00FF">
+        <label for="autoContrast" style="min-width:0;">
+          <input type="checkbox" id="autoContrast" checked>
+          Auto contrast
+        </label>
+      </div>
+      <button class="download-btn" id="downloadBtn">Download with grid</button>
+    </div>
+
+    <div class="canvas-container">
+      <div class="cap" id="gridCap">Grid overlay</div>
+      <canvas id="gridCanvas"></canvas>
+    </div>
+  </section>
+
+  <footer>Runs entirely in your browser. No image data leaves this page.</footer>
+</div>
+
+<canvas id="workCanvas" class="hidden"></canvas>
+
+<script src="../assets/shared-image.js"></script>
+<script>
+(function(){
+  const dropzone = document.getElementById('dropzone');
+  const fileInput = document.getElementById('fileInput');
+  const workArea = document.getElementById('workArea');
+  const workCanvas = document.getElementById('workCanvas');
+  const gridCanvas = document.getElementById('gridCanvas');
+  const gridCap = document.getElementById('gridCap');
+  const divisions = document.getElementById('divisions');
+  const divisionsValue = document.getElementById('divisionsValue');
+  const lineWidth = document.getElementById('lineWidth');
+  const lineWidthValue = document.getElementById('lineWidthValue');
+  const lineColour = document.getElementById('lineColour');
+  const autoContrast = document.getElementById('autoContrast');
+  const downloadBtn = document.getElementById('downloadBtn');
+
+  const MAX_DIM = 1200;
+
+  let source = null;   // untouched RGBA of the working image
+  let W = 0, H = 0;
+
+  dropzone.addEventListener('click', () => fileInput.click());
+  dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('drag'); });
+  dropzone.addEventListener('dragleave', () => dropzone.classList.remove('drag'));
+  dropzone.addEventListener('drop', e => {
+    e.preventDefault();
+    dropzone.classList.remove('drag');
+    if(e.dataTransfer.files && e.dataTransfer.files[0]) loadFile(e.dataTransfer.files[0]);
+  });
+  fileInput.addEventListener('change', e => {
+    if(e.target.files && e.target.files[0]) loadFile(e.target.files[0]);
+  });
+
+  divisions.addEventListener('input', () => {
+    divisionsValue.textContent = divisions.value;
+    render();
+  });
+  lineWidth.addEventListener('input', () => {
+    lineWidthValue.textContent = lineWidth.value + ' px';
+    render();
+  });
+  lineColour.addEventListener('input', () => {
+    autoContrast.checked = false;
+    render();
+  });
+  autoContrast.addEventListener('change', render);
+
+  downloadBtn.addEventListener('click', () => {
+    const link = document.createElement('a');
+    link.download = `grid-${divisions.value}.png`;
+    link.href = gridCanvas.toDataURL('image/png');
+    link.click();
+  });
+
+  function loadFile(file){
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      SharedImage.set(img, file.name);
+      processImage(img);
+    };
+    img.src = url;
+  }
+
+  SharedImage.attach({
+    onImage: processImage,
+    onNewImage: () => {
+      workArea.classList.add('hidden');
+      dropzone.classList.remove('hidden');
+      fileInput.value = '';
+    }
+  });
+
+  function processImage(img){
+    let w = img.naturalWidth, h = img.naturalHeight;
+    const scale = Math.min(1, MAX_DIM / Math.max(w, h));
+    W = w = Math.round(w * scale);
+    H = h = Math.round(h * scale);
+
+    workCanvas.width = w; workCanvas.height = h;
+    const wctx = workCanvas.getContext('2d');
+    wctx.drawImage(img, 0, 0, w, h);
+    source = wctx.getImageData(0, 0, w, h).data;
+
+    dropzone.classList.add('hidden');
+    workArea.classList.remove('hidden');
+    render();
+  }
+
+  function hexToRgb(hex){
+    const v = parseInt(hex.slice(1), 16);
+    return [(v >> 16) & 255, (v >> 8) & 255, v & 255];
+  }
+
+  function render(){
+    if(!source) return;
+
+    const n = parseInt(divisions.value, 10);
+    const lw = parseInt(lineWidth.value, 10);
+    const auto = autoContrast.checked;
+    const rgb = hexToRgb(lineColour.value);
+
+    const out = new ImageData(W, H);
+    out.data.set(source);
+    const d = out.data;
+
+    // square cells: the x division sets the cell size, rows follow from it
+    const cell = W / n;
+    const rows = Math.floor(H / cell);
+
+    function paint(x, y){
+      if(x < 0 || x >= W || y < 0 || y >= H) return;
+      const i = (y * W + x) * 4;
+
+      if(auto){
+        const lum = 0.2126*source[i] + 0.7152*source[i+1] + 0.0722*source[i+2];
+        const v = lum > 128 ? 0 : 255;
+        d[i] = v; d[i+1] = v; d[i+2] = v;
+      }else{
+        d[i] = rgb[0]; d[i+1] = rgb[1]; d[i+2] = rgb[2];
+      }
+      d[i+3] = 255;
+    }
+
+    const half = Math.floor(lw / 2);
+
+    for(let i = 0; i <= n; i++){
+      const centre = Math.round(i * cell);
+      const start = Math.min(Math.max(centre - half, 0), W - lw);
+      for(let x = start; x < start + lw; x++){
+        for(let y = 0; y < H; y++) paint(x, y);
+      }
+    }
+
+    for(let j = 0; j * cell <= H; j++){
+      const centre = Math.round(j * cell);
+      const start = Math.min(Math.max(centre - half, 0), H - lw);
+      for(let y = start; y < start + lw; y++){
+        for(let x = 0; x < W; x++) paint(x, y);
+      }
+    }
+
+    gridCanvas.width = W; gridCanvas.height = H;
+    gridCanvas.getContext('2d').putImageData(out, 0, 0);
+
+    const remainder = H - rows * cell;
+    gridCap.textContent =
+      `${n} × ${rows} squares · cell ${cell.toFixed(1)}px` +
+      (remainder > 1 ? ` · ${remainder.toFixed(0)}px partial row` : '');
+  }
+})();
+</script>
+</body>
+</html>

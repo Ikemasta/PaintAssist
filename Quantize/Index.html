@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Colour Quantizer</title>
+<link rel="stylesheet" href="../assets/global.css">
+</head>
+<body class="tool-quant">
+<div class="wrap">
+
+  <nav class="tool-nav">
+    <span class="nav-label">Tools</span>
+    <a class="tool-btn tool-btn--home" href="../Index.html">Home</a>
+    <a class="tool-btn tool-btn--value" href="../ValueFinder/Index.html">Value Finder</a>
+    <a class="tool-btn tool-btn--grey" href="../GreyScale/Index.html">Greyscale</a>
+    <a class="tool-btn tool-btn--edge" href="../EdgeDetect/Index.html">Edge Detection</a>
+    <a class="tool-btn tool-btn--quant" href="Index.html" aria-current="page">Quantize</a>
+    <a class="tool-btn tool-btn--grid" href="../GridOverlay/Index.html">Grid Overlay</a>
+    <a class="tool-btn tool-btn--colour" href="../ColorPicker/Index.html">Colour Picker</a>
+  </nav>
+
+  <header>
+    <p class="eyebrow">Palette reduction</p>
+    <h1>Colour Quantizer</h1>
+    <p>Reduce a reference to a limited palette. Colours are grouped with a k-d tree built by splitting the colour cloud along its widest axis, and every pixel is then matched to its nearest palette entry with a k-d nearest-neighbour search.</p>
+  </header>
+
+  <section>
+    <div class="dropzone" id="dropzone">
+      <p class="big">Drop a reference image, or click to browse</p>
+      <p class="small">JPG or PNG · processed locally, never uploaded anywhere</p>
+      <input type="file" id="fileInput" accept="image/*">
+    </div>
+  </section>
+
+  <section id="workArea" class="hidden">
+
+    <div class="controls">
+      <div class="control-group">
+        <label for="colourCount">Colours</label>
+        <input type="range" id="colourCount" min="2" max="64" value="8" step="1">
+        <span class="value-display" id="colourValue">8</span>
+      </div>
+      <div class="control-group">
+        <label for="ditherToggle">Dither</label>
+        <input type="checkbox" id="ditherToggle">
+        <span class="value-display">Floyd–Steinberg</span>
+      </div>
+      <button class="download-btn" id="downloadBtn">Download quantized</button>
+    </div>
+
+    <div class="canvas-grid">
+      <div class="canvas-container">
+        <div class="cap">Original</div>
+        <canvas id="srcCanvas"></canvas>
+      </div>
+      <div class="canvas-container">
+        <div class="cap">Quantized</div>
+        <canvas id="quantCanvas"></canvas>
+      </div>
+    </div>
+
+    <div class="swatch-section" style="margin-top:36px;">
+      <div class="cap-row">
+        <h2>Palette</h2>
+        <span id="paletteInfo"></span>
+      </div>
+      <div class="swatches" id="swatches"></div>
+    </div>
+  </section>
+
+  <footer>Runs entirely in your browser. No image data leaves this page.</footer>
+</div>
+
+<canvas id="workCanvas" class="hidden"></canvas>
+
+<script src="../assets/shared-image.js"></script>
+<script>
+(function(){
+  const dropzone = document.getElementById('dropzone');
+  const fileInput = document.getElementById('fileInput');
+  const workArea = document.getElementById('workArea');
+  const srcCanvas = document.getElementById('srcCanvas');
+  const quantCanvas = document.getElementById('quantCanvas');
+  const workCanvas = document.getElementById('workCanvas');
+  const colourCount = document.getElementById('colourCount');
+  const colourValue = document.getElementById('colourValue');
+  const ditherToggle = document.getElementById('ditherToggle');
+  const downloadBtn = document.getElementById('downloadBtn');
+  const swatchesEl = document.getElementById('swatches');
+  const paletteInfo = document.getElementById('paletteInfo');
+
+  const MAX_DIM = 1000;
+  const SAMPLE_TARGET = 120000;
+
+  let pixels = null;   // source RGBA of the working image
+  let W = 0, H = 0;
+  let pending = 0;
+
+  dropzone.addEventListener('click', () => fileInput.click());
+  dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('drag'); });
+  dropzone.addEventListener('dragleave', () => dropzone.classList.remove('drag'));
+  dropzone.addEventListener('drop', e => {
+    e.preventDefault();
+    dropzone.classList.remove('drag');
+    if(e.dataTransfer.files && e.dataTransfer.files[0]) loadFile(e.dataTransfer.files[0]);
+  });
+  fileInput.addEventListener('change', e => {
+    if(e.target.files && e.target.files[0]) loadFile(e.target.files[0]);
+  });
+
+  colourCount.addEventListener('input', () => {
+    colourValue.textContent = colourCount.value;
+    schedule();
+  });
+  ditherToggle.addEventListener('change', schedule);
+
+  downloadBtn.addEventListener('click', () => {
+    const link = document.createElement('a');
+    link.download = `quantized-${colourCount.value}.png`;
+    link.href = quantCanvas.toDataURL('image/png');
+    link.click();
+  });
+
+  function loadFile(file){
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      SharedImage.set(img, file.name);
+      processImage(img);
+    };
+    img.src = url;
+  }
+
+  SharedImage.attach({
+    onImage: processImage,
+    onNewImage: () => {
+      workArea.classList.add('hidden');
+      dropzone.classList.remove('hidden');
+      fileInput.value = '';
+    }
+  });
+
+  function processImage(img){
+    let w = img.naturalWidth, h = img.naturalHeight;
+    const scale = Math.min(1, MAX_DIM / Math.max(w, h));
+    W = w = Math.round(w * scale);
+    H = h = Math.round(h * scale);
+
+    workCanvas.width = w; workCanvas.height = h;
+    const wctx = workCanvas.getContext('2d');
+    wctx.drawImage(img, 0, 0, w, h);
+    pixels = wctx.getImageData(0, 0, w, h).data;
+
+    srcCanvas.width = w; srcCanvas.height = h;
+    srcCanvas.getContext('2d').drawImage(workCanvas, 0, 0);
+
+    dropzone.classList.add('hidden');
+    workArea.classList.remove('hidden');
+    render();
+  }
+
+  function schedule(){
+    if(!pixels) return;
+    clearTimeout(pending);
+    pending = setTimeout(render, 120);
+  }
+
+  /* ---- palette: k-d style median split on the widest colour axis ---- */
+
+  function buildPalette(k){
+    const total = W * H;
+    const stride = Math.max(1, Math.floor(total / SAMPLE_TARGET));
+    const n = Math.ceil(total / stride);
+
+    const R = new Uint8Array(n), G = new Uint8Array(n), B = new Uint8Array(n);
+    let m = 0;
+    for(let p = 0; p < total; p += stride){
+      const i = p * 4;
+      R[m] = pixels[i]; G[m] = pixels[i+1]; B[m] = pixels[i+2];
+      m++;
+    }
+
+    const idx = new Uint32Array(m);
+    for(let i = 0; i < m; i++) idx[i] = i;
+
+    const channels = [R, G, B];
+
+    function makeBucket(start, end){
+      let axis = 0, spread = -1;
+      for(let a = 0; a < 3; a++){
+        const ch = channels[a];
+        let mn = 255, mx = 0;
+        for(let i = start; i < end; i++){
+          const v = ch[idx[i]];
+          if(v < mn) mn = v;
+          if(v > mx) mx = v;
+        }
+        if(mx - mn > spread){ spread = mx - mn; axis = a; }
+      }
+
+      // total squared deviation along the widest axis: splitting the bucket
+      // with the largest one removes the most error
+      const ch = channels[axis];
+      let sum = 0, sumSq = 0;
+      for(let i = start; i < end; i++){
+        const v = ch[idx[i]];
+        sum += v; sumSq += v * v;
+      }
+      const count = end - start;
+      const variance = sumSq - (sum * sum) / count;
+
+      return { start, end, axis, score: count > 1 ? variance : 0 };
+    }
+
+    const buckets = [makeBucket(0, m)];
+
+    while(buckets.length < k){
+      let bi = -1, best = 1e-6;
+      for(let i = 0; i < buckets.length; i++){
+        if(buckets[i].score > best){ best = buckets[i].score; bi = i; }
+      }
+      if(bi < 0) break;
+
+      const b = buckets[bi];
+      const ch = channels[b.axis];
+      const slice = Array.from(idx.subarray(b.start, b.end));
+      slice.sort((p, q) => ch[p] - ch[q]);
+      idx.set(slice, b.start);
+
+      const mid = (b.start + b.end) >> 1;
+      buckets.splice(bi, 1, makeBucket(b.start, mid), makeBucket(mid, b.end));
+    }
+
+    return buckets.map(b => {
+      let r = 0, g = 0, bl = 0;
+      for(let i = b.start; i < b.end; i++){
+        const p = idx[i];
+        r += R[p]; g += G[p]; bl += B[p];
+      }
+      const c = b.end - b.start;
+      return [Math.round(r/c), Math.round(g/c), Math.round(bl/c)];
+    });
+  }
+
+  /* ---- k-d tree over the palette, for nearest-colour lookup ---- */
+
+  function buildKdTree(colours){
+    function build(items){
+      if(items.length === 0) return null;
+      if(items.length === 1) return { colour: items[0] };
+
+      let axis = 0, spread = -1;
+      for(let a = 0; a < 3; a++){
+        let mn = 255, mx = 0;
+        for(const c of items){
+          if(c[a] < mn) mn = c[a];
+          if(c[a] > mx) mx = c[a];
+        }
+        if(mx - mn > spread){ spread = mx - mn; axis = a; }
+      }
+
+      items.sort((p, q) => p[axis] - q[axis]);
+      const mid = items.length >> 1;
+
+      return {
+        axis,
+        split: items[mid][axis],
+        colour: items[mid],
+        left: build(items.slice(0, mid)),
+        right: build(items.slice(mid + 1))
+      };
+    }
+    return build(colours.slice());
+  }
+
+  function nearest(root, r, g, b){
+    let bestColour = null, bestDist = Infinity;
+
+    (function search(node){
+      if(!node) return;
+
+      const c = node.colour;
+      const dr = r - c[0], dg = g - c[1], db = b - c[2];
+      const d = dr*dr + dg*dg + db*db;
+      if(d < bestDist){ bestDist = d; bestColour = c; }
+
+      if(node.axis === undefined) return;
+
+      const value = node.axis === 0 ? r : node.axis === 1 ? g : b;
+      const diff = value - node.split;
+
+      search(diff < 0 ? node.left : node.right);
+      if(diff * diff < bestDist) search(diff < 0 ? node.right : node.left);
+    })(root);
+
+    return bestColour;
+  }
+
+  /* ---- render ---- */
+
+  function render(){
+    if(!pixels) return;
+
+    const k = parseInt(colourCount.value, 10);
+    const palette = buildPalette(k);
+    palette.forEach((c, i) => c[3] = i);
+
+    const tree = buildKdTree(palette);
+    const counts = new Uint32Array(palette.length);
+
+    const out = new ImageData(W, H);
+    const dst = out.data;
+
+    if(ditherToggle.checked){
+      ditherInto(dst, tree, counts);
+    }else{
+      for(let i = 0; i < dst.length; i += 4){
+        const c = nearest(tree, pixels[i], pixels[i+1], pixels[i+2]);
+        dst[i] = c[0]; dst[i+1] = c[1]; dst[i+2] = c[2]; dst[i+3] = 255;
+        counts[c[3]]++;
+      }
+    }
+
+    quantCanvas.width = W; quantCanvas.height = H;
+    quantCanvas.getContext('2d').putImageData(out, 0, 0);
+
+    drawSwatches(palette, counts);
+  }
+
+  function ditherInto(dst, tree, counts){
+    const buf = new Float32Array(W * H * 3);
+    for(let p = 0, i = 0; p < buf.length; p += 3, i += 4){
+      buf[p] = pixels[i]; buf[p+1] = pixels[i+1]; buf[p+2] = pixels[i+2];
+    }
+
+    for(let y = 0; y < H; y++){
+      for(let x = 0; x < W; x++){
+        const p = (y * W + x) * 3;
+        const r = buf[p], g = buf[p+1], b = buf[p+2];
+
+        const c = nearest(tree, clamp(r), clamp(g), clamp(b));
+        const i = (y * W + x) * 4;
+        dst[i] = c[0]; dst[i+1] = c[1]; dst[i+2] = c[2]; dst[i+3] = 255;
+        counts[c[3]]++;
+
+        const er = r - c[0], eg = g - c[1], eb = b - c[2];
+        spread(buf, x + 1, y,     er, eg, eb, 7/16);
+        spread(buf, x - 1, y + 1, er, eg, eb, 3/16);
+        spread(buf, x,     y + 1, er, eg, eb, 5/16);
+        spread(buf, x + 1, y + 1, er, eg, eb, 1/16);
+      }
+    }
+  }
+
+  function spread(buf, x, y, er, eg, eb, f){
+    if(x < 0 || x >= W || y >= H) return;
+    const p = (y * W + x) * 3;
+    buf[p] += er * f; buf[p+1] += eg * f; buf[p+2] += eb * f;
+  }
+
+  function clamp(v){ return v < 0 ? 0 : v > 255 ? 255 : v; }
+
+  function hex(c){
+    return '#' + [c[0], c[1], c[2]].map(v => v.toString(16).padStart(2, '0')).join('').toUpperCase();
+  }
+
+  function drawSwatches(palette, counts){
+    const total = W * H;
+    const order = palette
+      .map((c, i) => ({ c, share: counts[i] / total }))
+      .sort((a, b) => b.share - a.share);
+
+    swatchesEl.innerHTML = '';
+    order.forEach(({ c, share }) => {
+      const lum = 0.2126*c[0] + 0.7152*c[1] + 0.0722*c[2];
+      const div = document.createElement('div');
+      div.className = 'swatch';
+      div.style.background = `rgb(${c[0]},${c[1]},${c[2]})`;
+      div.style.color = lum > 130 ? '#201f1c' : '#ece7de';
+      div.innerHTML = `<span class="pct">${(share*100).toFixed(1)}%</span><span class="hex">${hex(c)}</span>`;
+      swatchesEl.appendChild(div);
+    });
+
+    paletteInfo.textContent = `${palette.length} colours · ${W}×${H}px`;
+  }
+})();
+</script>
+</body>
+</html>

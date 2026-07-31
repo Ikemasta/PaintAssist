@@ -21,6 +21,10 @@
   --tool-grey-bright:#7d909a;
   --tool-edge:#4a6b3f;
   --tool-edge-bright:#638c52;
+  --tool-quant:#4a4f7a;
+  --tool-quant-bright:#6f76ad;
+  --tool-grid:#2f6f75;
+  --tool-grid-bright:#47959d;
   --tool-colour:#a8752a;
   --tool-colour-bright:#c99242;
 
@@ -37,6 +41,8 @@
 body.tool-value  {--accent:var(--tool-value);  --accent-bright:var(--tool-value-bright);}
 body.tool-grey   {--accent:var(--tool-grey);   --accent-bright:var(--tool-grey-bright);}
 body.tool-edge   {--accent:var(--tool-edge);   --accent-bright:var(--tool-edge-bright);}
+body.tool-quant  {--accent:var(--tool-quant);  --accent-bright:var(--tool-quant-bright);}
+body.tool-grid   {--accent:var(--tool-grid);   --accent-bright:var(--tool-grid-bright);}
 body.tool-colour {--accent:var(--tool-colour); --accent-bright:var(--tool-colour-bright);}
 
 *{box-sizing:border-box;}
@@ -114,6 +120,8 @@ body{
 .tool-btn--value {--dot:var(--tool-value-bright);}
 .tool-btn--grey  {--dot:var(--tool-grey-bright);}
 .tool-btn--edge  {--dot:var(--tool-edge-bright);}
+.tool-btn--quant {--dot:var(--tool-quant-bright);}
+.tool-btn--grid  {--dot:var(--tool-grid-bright);}
 .tool-btn--colour{--dot:var(--tool-colour-bright);}
 .tool-btn--home  {--dot:var(--paper-dim);}
 
@@ -181,6 +189,8 @@ body{
 .tool-card--value {--dot:var(--tool-value-bright);}
 .tool-card--grey  {--dot:var(--tool-grey-bright);}
 .tool-card--edge  {--dot:var(--tool-edge-bright);}
+.tool-card--quant {--dot:var(--tool-quant-bright);}
+.tool-card--grid  {--dot:var(--tool-grid-bright);}
 .tool-card--colour{--dot:var(--tool-colour-bright);}
 
 /* ---------- shared image bar ---------- */
@@ -339,6 +349,16 @@ input[type=text]{
 }
 
 input[type=checkbox]{accent-color:var(--accent-bright);}
+
+input[type=color]{
+  width:44px;
+  height:30px;
+  padding:2px;
+  background:var(--charcoal);
+  border:1px solid var(--line);
+  border-radius:3px;
+  cursor:pointer;
+}
 
 /* file inputs inside a dropzone stay hidden, standalone ones get styled */
 input[type=file]{
@@ -505,14 +525,15 @@ canvas{display:block;}
 
 .swatches{
   display:flex;
+  flex-wrap:wrap;
   border:1px solid var(--line);
   border-radius:3px;
   overflow:hidden;
 }
 
 .swatch{
-  flex:1;
-  min-width:0;
+  flex:1 1 64px;
+  min-width:64px;
   padding:14px 8px 10px;
   text-align:center;
   border-right:1px solid rgba(0,0,0,0.15);
